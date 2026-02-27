@@ -32,7 +32,6 @@ function fmtDate(ts) {
   } catch { return ""; }
 }
 
-// ── Icons ──────────────────────────────────────────
 const IcoHome = ({ on }) => (
   <svg width="22" height="22" viewBox="0 0 24 24" fill={on ? "#1a9e8a" : "none"} stroke={on ? "#1a9e8a" : "#bbb"} strokeWidth="1.8">
     <path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H5a1 1 0 01-1-1V9.5z" />
@@ -48,16 +47,7 @@ const IcoTrash = () => (
     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
   </svg>
 );
-const IcoGoogle = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24">
-    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/>
-    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-  </svg>
-);
 
-// ── Spinner ────────────────────────────────────────
 const Spinner = () => (
   <div style={{ minHeight: "100vh", background: "#f0efed", display: "flex", alignItems: "center", justifyContent: "center" }}>
     <div style={{ width: "28px", height: "28px", border: "2px solid #ddd", borderTopColor: "#1a9e8a", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
@@ -65,30 +55,67 @@ const Spinner = () => (
   </div>
 );
 
-// ── Auth Screen ────────────────────────────────────
-function AuthScreen({ onAuth }) {
-  const [mode, setMode]       = useState("login"); // login | signup
-  const [email, setEmail]     = useState("");
+function Heatmap({ txs }) {
+  const dayMap = {};
+  txs.forEach(tx => {
+    const key = new Date(tx.created_at).toISOString().slice(0, 10);
+    dayMap[key] = (dayMap[key] || 0) + tx.pts;
+  });
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cells = [];
+  for (let i = 363; i >= 0; i--) {
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    cells.push({ date: key, pts: dayMap[key] !== undefined ? dayMap[key] : null, d });
+  }
+  const weeks = [];
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+  const monthLabels = [];
+  weeks.forEach((week, wi) => {
+    if (week[0].d.getDate() <= 7)
+      monthLabels.push({ wi, label: week[0].d.toLocaleDateString("en-US", { month: "short" }) });
+  });
+  const cellColor = (pts) => pts === null ? "#f0efed" : pts > 0 ? "#1a9e8a" : pts < 0 ? "#e53535" : "#f0efed";
+  const days = ["Mon","","Wed","","Fri","","Sun"];
+  return (
+    <div>
+      <div style={{ display: "flex", marginLeft: "28px", marginBottom: "4px" }}>
+        {weeks.map((_, wi) => {
+          const lbl = monthLabels.find(m => m.wi === wi);
+          return <div key={wi} style={{ width: "14px", marginRight: "2px", fontSize: "9px", color: "#bbb", flexShrink: 0 }}>{lbl ? lbl.label : ""}</div>;
+        })}
+      </div>
+      <div style={{ display: "flex" }}>
+        <div style={{ display: "flex", flexDirection: "column", marginRight: "4px" }}>
+          {days.map((d, i) => <div key={i} style={{ height: "12px", marginBottom: "2px", fontSize: "9px", color: "#bbb", lineHeight: "12px", width: "24px" }}>{d}</div>)}
+        </div>
+        <div style={{ display: "flex", gap: "2px" }}>
+          {weeks.map((week, wi) => (
+            <div key={wi} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+              {week.map((cell, di) => (
+                <div key={di} title={`${cell.date}${cell.pts !== null ? ": " + (cell.pts > 0 ? "+" : "") + cell.pts : ""}`}
+                  style={{ width: "12px", height: "12px", borderRadius: "2px", background: cellColor(cell.pts), flexShrink: 0 }} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthScreen() {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]     = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleEmail(e) {
-    e.preventDefault();
-    setLoading(true); setError("");
+    e.preventDefault(); setLoading(true); setError("");
     const { error } = mode === "login"
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password });
-    if (error) setError(error.message);
-    setLoading(false);
-  }
-
-  async function handleGoogle() {
-    setLoading(true); setError("");
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
     if (error) setError(error.message);
     setLoading(false);
   }
@@ -100,59 +127,21 @@ function AuthScreen({ onAuth }) {
           <div style={{ fontSize: "32px", fontWeight: "700", letterSpacing: "-1px", color: "#111" }}>Integrity Bank</div>
           <div style={{ fontSize: "14px", color: "#aaa", marginTop: "6px" }}>Your word. Your worth.</div>
         </div>
-
         <div style={{ background: "#fff", borderRadius: "24px", padding: "28px" }}>
-          {/* Google */}
-          <button onClick={handleGoogle} disabled={loading} style={{
-            width: "100%", padding: "14px", border: "1.5px solid #e8e8e6",
-            borderRadius: "14px", background: "#fff", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: "10px",
-            fontSize: "15px", fontWeight: "600", color: "#111", fontFamily: "inherit",
-            marginBottom: "20px",
-          }}>
-            <IcoGoogle /> Mit Google einloggen
-          </button>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-            <div style={{ flex: 1, height: "1px", background: "#f0efed" }} />
-            <span style={{ fontSize: "12px", color: "#bbb" }}>oder</span>
-            <div style={{ flex: 1, height: "1px", background: "#f0efed" }} />
-          </div>
-
-          {/* Email form */}
           <form onSubmit={handleEmail}>
-            <input
-              type="email" placeholder="Email" value={email}
-              onChange={e => setEmail(e.target.value)} required
-              style={{
-                width: "100%", padding: "14px", border: "1.5px solid #e8e8e6",
-                borderRadius: "12px", fontSize: "15px", fontFamily: "inherit",
-                color: "#111", marginBottom: "10px", background: "#fff",
-              }}
-            />
-            <input
-              type="password" placeholder="Passwort" value={password}
-              onChange={e => setPassword(e.target.value)} required
-              style={{
-                width: "100%", padding: "14px", border: "1.5px solid #e8e8e6",
-                borderRadius: "12px", fontSize: "15px", fontFamily: "inherit",
-                color: "#111", marginBottom: "16px", background: "#fff",
-              }}
-            />
+            <input type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} required
+              style={{ width: "100%", padding: "14px", border: "1.5px solid #e8e8e6", borderRadius: "12px", fontSize: "15px", fontFamily: "inherit", color: "#111", marginBottom: "10px", background: "#fff" }} />
+            <input type="password" placeholder="Passwort" value={password} onChange={e => setPassword(e.target.value)} required
+              style={{ width: "100%", padding: "14px", border: "1.5px solid #e8e8e6", borderRadius: "12px", fontSize: "15px", fontFamily: "inherit", color: "#111", marginBottom: "16px", background: "#fff" }} />
             {error && <div style={{ color: "#e53535", fontSize: "13px", marginBottom: "12px" }}>{error}</div>}
-            <button type="submit" disabled={loading} style={{
-              width: "100%", padding: "15px", border: "none",
-              borderRadius: "14px", background: "#1a9e8a", color: "#fff",
-              fontSize: "15px", fontWeight: "600", cursor: "pointer", fontFamily: "inherit",
-            }}>
+            <button type="submit" disabled={loading}
+              style={{ width: "100%", padding: "15px", border: "none", borderRadius: "14px", background: "#1a9e8a", color: "#fff", fontSize: "15px", fontWeight: "600", cursor: "pointer", fontFamily: "inherit" }}>
               {loading ? "..." : mode === "login" ? "Einloggen" : "Account erstellen"}
             </button>
           </form>
-
           <div style={{ textAlign: "center", marginTop: "16px" }}>
-            <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }} style={{
-              background: "none", border: "none", color: "#1a9e8a", fontSize: "13px", cursor: "pointer", fontFamily: "inherit",
-            }}>
+            <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }}
+              style={{ background: "none", border: "none", color: "#1a9e8a", fontSize: "13px", cursor: "pointer", fontFamily: "inherit" }}>
               {mode === "login" ? "Noch kein Account? Registrieren" : "Schon registriert? Einloggen"}
             </button>
           </div>
@@ -163,36 +152,25 @@ function AuthScreen({ onAuth }) {
   );
 }
 
-// ── Main App ───────────────────────────────────────
 export default function App() {
   const [session, setSession] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-
-  const [queue, setQueue]   = useState([]);
-  const [txs, setTxs]       = useState([]);
+  const [queue, setQueue] = useState([]);
+  const [txs, setTxs] = useState([]);
   const [balance, setBalance] = useState(0);
   const [dataLoading, setDataLoading] = useState(false);
-
-  const [tab, setTab]         = useState("home");
-  const [flash, setFlash]     = useState(null);
+  const [tab, setTab] = useState("home");
+  const [flash, setFlash] = useState(null);
   const [promise, setPromise] = useState("");
-  const [diff, setDiff]       = useState(1);
+  const [diff, setDiff] = useState(1);
   const textRef = useRef(null);
 
-  // Auth listener
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setAuthLoading(false);
-    });
+    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => { setSession(session); setAuthLoading(false); });
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load data when logged in
   useEffect(() => {
     if (!session) { setQueue([]); setTxs([]); setBalance(0); return; }
     loadData();
@@ -201,38 +179,25 @@ export default function App() {
   async function loadData() {
     setDataLoading(true);
     const uid = session.user.id;
-
     const [{ data: qData }, { data: tData }] = await Promise.all([
       supabase.from("promises_queue").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
       supabase.from("transactions").select("*").eq("user_id", uid).order("created_at", { ascending: false }),
     ]);
-
-    const q = qData || [];
-    const t = tData || [];
-    setQueue(q);
-    setTxs(t);
-    setBalance(t.reduce((sum, tx) => sum + tx.pts, 0));
+    setQueue(qData || []); setTxs(tData || []);
+    setBalance((tData || []).reduce((sum, tx) => sum + tx.pts, 0));
     setDataLoading(false);
   }
 
-  useEffect(() => {
-    if (tab === "add") setTimeout(() => textRef.current?.focus(), 100);
-  }, [tab]);
+  useEffect(() => { if (tab === "add") setTimeout(() => textRef.current?.focus(), 100); }, [tab]);
 
-  function showFlash(pts, kept) {
-    setFlash({ pts, kept });
-    setTimeout(() => setFlash(null), 1500);
-  }
+  function showFlash(pts, kept) { setFlash({ pts, kept }); setTimeout(() => setFlash(null), 1500); }
 
   async function addToQueue() {
     if (!promise.trim()) return;
     const d = DIFFICULTIES[diff];
     const { data, error } = await supabase.from("promises_queue").insert({
-      user_id: session.user.id,
-      promise: promise.trim(),
-      diff_label: d.label,
-      diff_pts: d.pts,
-      diff_penalty: d.penalty,
+      user_id: session.user.id, promise: promise.trim(),
+      diff_label: d.label, diff_pts: d.pts, diff_penalty: d.penalty,
     }).select().single();
     if (!error && data) setQueue(prev => [data, ...prev]);
     setPromise(""); setDiff(1); setTab("home");
@@ -240,20 +205,13 @@ export default function App() {
 
   async function resolve(item, kept) {
     const pts = kept ? item.diff_pts : -item.diff_penalty;
-    const uid = session.user.id;
-
     const [{ error: delErr }, { data: tx, error: txErr }] = await Promise.all([
       supabase.from("promises_queue").delete().eq("id", item.id),
       supabase.from("transactions").insert({
-        user_id: uid,
-        promise: item.promise,
-        kept,
-        diff_label: item.diff_label,
-        diff_pts: item.diff_pts,
-        pts,
+        user_id: session.user.id, promise: item.promise,
+        kept, diff_label: item.diff_label, diff_pts: item.diff_pts, pts,
       }).select().single(),
     ]);
-
     if (!delErr && !txErr && tx) {
       setQueue(prev => prev.filter(q => q.id !== item.id));
       setTxs(prev => [tx, ...prev]);
@@ -273,18 +231,26 @@ export default function App() {
     setBalance(prev => prev - tx.pts);
   }
 
-  async function signOut() {
-    await supabase.auth.signOut();
-  }
-
-  const keptCount   = txs.filter(t => t.kept).length;
+  const keptCount = txs.filter(t => t.kept).length;
   const brokenCount = txs.filter(t => !t.kept).length;
-  const rate = keptCount + brokenCount > 0
-    ? Math.round((keptCount / (keptCount + brokenCount)) * 100)
-    : 100;
+  const rate = keptCount + brokenCount > 0 ? Math.round((keptCount / (keptCount + brokenCount)) * 100) : 100;
 
   if (authLoading) return <Spinner />;
   if (!session) return <AuthScreen />;
+
+  const TxRow = ({ tx, i, total }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: "13px", padding: "14px 18px", borderBottom: i < total - 1 ? "1px solid #f5f4f2" : "none" }}>
+      <div style={{ width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0, background: tx.pts >= 0 ? "#e8f5f3" : "#fdecea", display: "flex", alignItems: "center", justifyContent: "center", color: tx.pts >= 0 ? "#1a9e8a" : "#e53535", fontSize: "14px", fontWeight: "700" }}>
+        {tx.pts >= 0 ? "↑" : "↓"}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: "14px", fontWeight: "500", color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tx.promise}</div>
+        <div style={{ fontSize: "11px", color: "#bbb", marginTop: "3px" }}>{tx.diff_label} · {fmtDate(tx.created_at)}</div>
+      </div>
+      <div style={{ fontSize: "14px", fontWeight: "600", flexShrink: 0, color: tx.pts >= 0 ? "#1a9e8a" : "#e53535" }}>{tx.pts >= 0 ? "+" : ""}{fmtEur(tx.pts)}</div>
+      <button className="tap" onClick={() => removeTx(tx)} style={{ background: "none", border: "none", padding: "4px", flexShrink: 0 }}><IcoTrash /></button>
+    </div>
+  );
 
   return (
     <div style={{ fontFamily: "-apple-system,'Helvetica Neue',sans-serif", background: "#f0efed", minHeight: "100vh", maxWidth: "390px", margin: "0 auto", paddingBottom: "90px" }}>
@@ -296,69 +262,45 @@ export default function App() {
         @keyframes up  { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:translateY(0) } }
         @keyframes pop { 0%{opacity:1;transform:translateX(-50%) scale(1)} 60%{opacity:1;transform:translateX(-50%) translateY(-20px) scale(1.1)} 100%{opacity:0;transform:translateX(-50%) translateY(-36px) scale(0.9)} }
         @keyframes spin { to { transform: rotate(360deg) } }
-        .tap { cursor: pointer; }
-        .tap:active { opacity: 0.55; }
+        .tap { cursor: pointer; } .tap:active { opacity: 0.55; }
       `}</style>
 
       {flash && (
-        <div key={String(flash.pts) + Date.now()} style={{
-          position: "fixed", top: "32%", left: "50%",
-          fontSize: "46px", fontWeight: "700", letterSpacing: "-2px",
-          color: flash.kept ? "#1a9e8a" : "#e53535",
-          pointerEvents: "none", zIndex: 999,
-          animation: "pop 1.5s ease-out forwards",
-        }}>
+        <div key={String(flash.pts) + Date.now()} style={{ position: "fixed", top: "32%", left: "50%", fontSize: "46px", fontWeight: "700", letterSpacing: "-2px", color: flash.kept ? "#1a9e8a" : "#e53535", pointerEvents: "none", zIndex: 999, animation: "pop 1.5s ease-out forwards" }}>
           {flash.pts > 0 ? "+" : ""}{flash.pts}
         </div>
       )}
 
-      {/* ══════════════ HOME ══════════════ */}
       {tab === "home" && (
         <div style={{ animation: "up 0.25s ease-out" }}>
           <div style={{ padding: "56px 20px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: "26px", fontWeight: "700", letterSpacing: "-0.5px", color: "#111" }}>Home</span>
-            <button className="tap" onClick={signOut} style={{
-              background: "none", border: "none", fontSize: "12px", color: "#bbb", cursor: "pointer", fontFamily: "inherit",
-            }}>Sign out</button>
+            <button className="tap" onClick={() => supabase.auth.signOut()} style={{ background: "none", border: "none", fontSize: "12px", color: "#bbb", cursor: "pointer", fontFamily: "inherit" }}>Sign out</button>
           </div>
-
           {dataLoading ? (
             <div style={{ display: "flex", justifyContent: "center", padding: "60px" }}>
               <div style={{ width: "24px", height: "24px", border: "2px solid #ddd", borderTopColor: "#1a9e8a", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
             </div>
           ) : (
             <>
-              {/* Balance */}
               <div style={{ margin: "0 20px", background: "#fff", borderRadius: "20px", padding: "22px" }}>
                 <div style={{ fontSize: "12px", color: "#aaa", marginBottom: "6px" }}>Integrity Balance</div>
-                <div style={{ fontSize: "38px", fontWeight: "700", letterSpacing: "-1.5px", color: balance >= 0 ? "#111" : "#e53535", lineHeight: 1 }}>
-                  {fmtEur(balance)}
-                </div>
+                <div style={{ fontSize: "38px", fontWeight: "700", letterSpacing: "-1.5px", color: balance >= 0 ? "#111" : "#e53535", lineHeight: 1 }}>{fmtEur(balance)}</div>
                 <div style={{ fontSize: "13px", color: "#1a9e8a", marginTop: "10px", fontWeight: "500" }}>{getRank(balance)}</div>
               </div>
-
-              {/* Stats */}
               <div style={{ margin: "12px 20px 0", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
-                {[
-                  { label: "Kept",   val: keptCount,   color: "#1a9e8a" },
-                  { label: "Broken", val: brokenCount, color: "#e53535" },
-                  { label: "Rate",   val: rate + "%",  color: "#111"    },
-                ].map(s => (
+                {[{ label: "Kept", val: keptCount, color: "#1a9e8a" }, { label: "Broken", val: brokenCount, color: "#e53535" }, { label: "Rate", val: rate + "%", color: "#111" }].map(s => (
                   <div key={s.label} style={{ background: "#fff", borderRadius: "16px", padding: "14px 0", textAlign: "center" }}>
                     <div style={{ fontSize: "22px", fontWeight: "700", color: s.color }}>{s.val}</div>
                     <div style={{ fontSize: "10px", color: "#bbb", marginTop: "3px", letterSpacing: "0.5px", textTransform: "uppercase" }}>{s.label}</div>
                   </div>
                 ))}
               </div>
-
-              {/* Open Promises */}
               {queue.length > 0 && (
                 <div style={{ margin: "20px 20px 0" }}>
                   <div style={{ fontSize: "15px", fontWeight: "600", color: "#111", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" }}>
                     Open Promises
-                    <span style={{ fontSize: "11px", background: "#1a9e8a", color: "#fff", borderRadius: "99px", padding: "2px 8px", fontWeight: "600" }}>
-                      {queue.length}
-                    </span>
+                    <span style={{ fontSize: "11px", background: "#1a9e8a", color: "#fff", borderRadius: "99px", padding: "2px 8px", fontWeight: "600" }}>{queue.length}</span>
                   </div>
                   <div style={{ background: "#fff", borderRadius: "20px", overflow: "hidden" }}>
                     {queue.map((item, i) => (
@@ -366,29 +308,15 @@ export default function App() {
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
                           <div style={{ flex: 1, paddingRight: "10px" }}>
                             <div style={{ fontSize: "14px", fontWeight: "500", color: "#111", lineHeight: "1.4" }}>{item.promise}</div>
-                            <div style={{ fontSize: "11px", color: "#bbb", marginTop: "4px" }}>
-                              {item.diff_label} · {fmtDate(item.created_at)}
-                            </div>
+                            <div style={{ fontSize: "11px", color: "#bbb", marginTop: "4px" }}>{item.diff_label} · {fmtDate(item.created_at)}</div>
                           </div>
-                          <button className="tap" onClick={() => removeQueue(item.id)} style={{ background: "none", border: "none", padding: "2px", flexShrink: 0, marginTop: "2px" }}>
-                            <IcoTrash />
-                          </button>
+                          <button className="tap" onClick={() => removeQueue(item.id)} style={{ background: "none", border: "none", padding: "2px", flexShrink: 0, marginTop: "2px" }}><IcoTrash /></button>
                         </div>
                         <div style={{ display: "flex", gap: "8px" }}>
-                          <button className="tap" onClick={() => resolve(item, false)} style={{
-                            flex: 1, padding: "11px 8px", background: "#fff3f3",
-                            border: "1.5px solid #fca5a5", borderRadius: "12px",
-                            color: "#e53535", fontSize: "13px", fontWeight: "600", fontFamily: "inherit",
-                            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                          }}>
+                          <button className="tap" onClick={() => resolve(item, false)} style={{ flex: 1, padding: "11px 8px", background: "#fff3f3", border: "1.5px solid #fca5a5", borderRadius: "12px", color: "#e53535", fontSize: "13px", fontWeight: "600", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                             Broke it <span style={{ opacity: 0.65, fontSize: "12px" }}>−{item.diff_penalty}</span>
                           </button>
-                          <button className="tap" onClick={() => resolve(item, true)} style={{
-                            flex: 1, padding: "11px 8px", background: "#1a9e8a",
-                            border: "none", borderRadius: "12px",
-                            color: "#fff", fontSize: "13px", fontWeight: "600", fontFamily: "inherit",
-                            display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
-                          }}>
+                          <button className="tap" onClick={() => resolve(item, true)} style={{ flex: 1, padding: "11px 8px", background: "#1a9e8a", border: "none", borderRadius: "12px", color: "#fff", fontSize: "13px", fontWeight: "600", fontFamily: "inherit", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}>
                             Kept it <span style={{ opacity: 0.75, fontSize: "12px" }}>+{item.diff_pts}</span>
                           </button>
                         </div>
@@ -397,43 +325,11 @@ export default function App() {
                   </div>
                 </div>
               )}
-
-              {/* Transactions */}
               <div style={{ margin: "20px 20px 0" }}>
                 <div style={{ fontSize: "15px", fontWeight: "600", color: "#111", marginBottom: "12px" }}>Transactions</div>
                 <div style={{ background: "#fff", borderRadius: "20px", overflow: "hidden" }}>
-                  {txs.length === 0 ? (
-                    <div style={{ padding: "36px 20px", textAlign: "center", color: "#ccc", fontSize: "14px" }}>No transactions yet</div>
-                  ) : txs.map((tx, i) => (
-                    <div key={tx.id} style={{
-                      display: "flex", alignItems: "center", gap: "13px",
-                      padding: "14px 18px",
-                      borderBottom: i < txs.length - 1 ? "1px solid #f5f4f2" : "none",
-                    }}>
-                      <div style={{
-                        width: "38px", height: "38px", borderRadius: "50%", flexShrink: 0,
-                        background: tx.pts >= 0 ? "#e8f5f3" : "#fdecea",
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        color: tx.pts >= 0 ? "#1a9e8a" : "#e53535", fontSize: "14px", fontWeight: "700",
-                      }}>
-                        {tx.pts >= 0 ? "↑" : "↓"}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: "14px", fontWeight: "500", color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {tx.promise}
-                        </div>
-                        <div style={{ fontSize: "11px", color: "#bbb", marginTop: "3px" }}>
-                          {tx.diff_label} · {fmtDate(tx.created_at)}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: "14px", fontWeight: "600", flexShrink: 0, color: tx.pts >= 0 ? "#1a9e8a" : "#e53535" }}>
-                        {tx.pts >= 0 ? "+" : ""}{fmtEur(tx.pts)}
-                      </div>
-                      <button className="tap" onClick={() => removeTx(tx)} style={{ background: "none", border: "none", padding: "4px", flexShrink: 0 }}>
-                        <IcoTrash />
-                      </button>
-                    </div>
-                  ))}
+                  {txs.length === 0 ? <div style={{ padding: "36px 20px", textAlign: "center", color: "#ccc", fontSize: "14px" }}>No transactions yet</div>
+                    : txs.map((tx, i) => <TxRow key={tx.id} tx={tx} i={i} total={txs.length} />)}
                 </div>
               </div>
             </>
@@ -441,43 +337,25 @@ export default function App() {
         </div>
       )}
 
-      {/* ══════════════ ADD ══════════════ */}
       {tab === "add" && (
         <div style={{ padding: "56px 20px 40px", animation: "up 0.22s ease-out" }}>
-          <div style={{ fontSize: "26px", fontWeight: "700", letterSpacing: "-0.5px", color: "#111", marginBottom: "24px" }}>
-            New Promise
-          </div>
-
+          <div style={{ fontSize: "26px", fontWeight: "700", letterSpacing: "-0.5px", color: "#111", marginBottom: "24px" }}>New Promise</div>
           <div style={{ background: "#fff", borderRadius: "20px", padding: "18px", marginBottom: "10px" }}>
             <div style={{ fontSize: "10px", color: "#bbb", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "10px" }}>I promise to…</div>
-            <textarea
-              ref={textRef}
-              value={promise}
-              onChange={e => setPromise(e.target.value)}
-              placeholder="Describe your commitment"
-              rows={3}
-              style={{ width: "100%", border: "none", background: "transparent", color: "#111", fontSize: "16px", lineHeight: "1.5", resize: "none" }}
-            />
+            <textarea ref={textRef} value={promise} onChange={e => setPromise(e.target.value)} placeholder="Describe your commitment" rows={3}
+              style={{ width: "100%", border: "none", background: "transparent", color: "#111", fontSize: "16px", lineHeight: "1.5", resize: "none" }} />
           </div>
-
           <div style={{ background: "#fff", borderRadius: "20px", padding: "18px", marginBottom: "10px" }}>
             <div style={{ fontSize: "10px", color: "#bbb", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "14px" }}>Difficulty</div>
             <div style={{ display: "flex", gap: "8px" }}>
               {DIFFICULTIES.map((d, i) => (
-                <button key={d.id} className="tap" onClick={() => setDiff(i)} style={{
-                  flex: 1, padding: "10px 0", border: "none",
-                  background: diff === i ? "#111" : "#f5f4f2",
-                  borderRadius: "12px", fontFamily: "inherit",
-                  color: diff === i ? "#fff" : "#555",
-                  fontSize: "12px", fontWeight: "600",
-                }}>
+                <button key={d.id} className="tap" onClick={() => setDiff(i)} style={{ flex: 1, padding: "10px 0", border: "none", background: diff === i ? "#111" : "#f5f4f2", borderRadius: "12px", fontFamily: "inherit", color: diff === i ? "#fff" : "#555", fontSize: "12px", fontWeight: "600" }}>
                   <div>{d.label}</div>
                   <div style={{ fontSize: "10px", opacity: 0.5, marginTop: "2px" }}>+{d.pts}/−{d.penalty}</div>
                 </button>
               ))}
             </div>
           </div>
-
           {promise.trim() && (
             <div style={{ background: "#fff", borderRadius: "16px", padding: "14px 18px", marginBottom: "12px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px" }}>
@@ -490,43 +368,47 @@ export default function App() {
               </div>
             </div>
           )}
-
-          <button className="tap" onClick={addToQueue} disabled={!promise.trim()} style={{
-            width: "100%", padding: "17px", border: "none", borderRadius: "16px", fontFamily: "inherit",
-            background: promise.trim() ? "#1a9e8a" : "#e5e3e0",
-            color: promise.trim() ? "#fff" : "#aaa",
-            fontSize: "15px", fontWeight: "600",
-          }}>
+          <button className="tap" onClick={addToQueue} disabled={!promise.trim()} style={{ width: "100%", padding: "17px", border: "none", borderRadius: "16px", fontFamily: "inherit", background: promise.trim() ? "#1a9e8a" : "#e5e3e0", color: promise.trim() ? "#fff" : "#aaa", fontSize: "15px", fontWeight: "600" }}>
             Add to Open Promises
           </button>
         </div>
       )}
 
-      {/* ══════════════ BOTTOM NAV ══════════════ */}
-      <div style={{
-        position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)",
-        width: "100%", maxWidth: "390px",
-        background: "rgba(255,255,255,0.95)", backdropFilter: "blur(20px)",
-        borderTop: "1px solid #eee",
-        display: "flex", alignItems: "center",
-        padding: "10px 0 26px",
-      }}>
+      {tab === "all" && (
+        <div style={{ padding: "56px 20px 40px", animation: "up 0.25s ease-out" }}>
+          <div style={{ fontSize: "26px", fontWeight: "700", letterSpacing: "-0.5px", color: "#111", marginBottom: "24px" }}>Activity</div>
+          <div style={{ background: "#fff", borderRadius: "20px", padding: "20px 16px", marginBottom: "20px", overflowX: "auto" }}>
+            <Heatmap txs={txs} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+              {[{ c: "#e53535", l: "Minus" }, { c: "#f0efed", l: "Nichts", b: "1px solid #e0e0de" }, { c: "#1a9e8a", l: "Plus" }].map(item => (
+                <div key={item.l} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <div style={{ width: "12px", height: "12px", borderRadius: "3px", background: item.c, border: item.b }} />
+                  <span style={{ fontSize: "10px", color: "#bbb" }}>{item.l}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ fontSize: "15px", fontWeight: "600", color: "#111", marginBottom: "12px" }}>All Transactions</div>
+          <div style={{ background: "#fff", borderRadius: "20px", overflow: "hidden" }}>
+            {txs.length === 0 ? <div style={{ padding: "36px 20px", textAlign: "center", color: "#ccc", fontSize: "14px" }}>No transactions yet</div>
+              : txs.map((tx, i) => <TxRow key={tx.id} tx={tx} i={i} total={txs.length} />)}
+          </div>
+        </div>
+      )}
+
+      <div style={{ position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: "390px", background: "rgba(255,255,255,0.95)", backdropFilter: "blur(20px)", borderTop: "1px solid #eee", display: "flex", alignItems: "center", padding: "10px 0 26px" }}>
         <button className="tap" onClick={() => setTab("home")} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "6px 0" }}>
           <IcoHome on={tab === "home"} />
           <span style={{ fontSize: "10px", color: tab === "home" ? "#1a9e8a" : "#bbb", fontWeight: "500" }}>Home</span>
         </button>
         <button className="tap" onClick={() => setTab("add")} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 0" }}>
-          <div style={{
-            width: "46px", height: "46px", borderRadius: "50%", background: "#1a9e8a",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            marginTop: "-18px", boxShadow: "0 4px 16px rgba(26,158,138,0.4)",
-          }}>
+          <div style={{ width: "46px", height: "46px", borderRadius: "50%", background: "#1a9e8a", display: "flex", alignItems: "center", justifyContent: "center", marginTop: "-18px", boxShadow: "0 4px 16px rgba(26,158,138,0.4)" }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2"><path d="M12 5v14M5 12h14"/></svg>
           </div>
         </button>
-        <button className="tap" onClick={() => setTab("home")} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "6px 0" }}>
-          <IcoList on={false} />
-          <span style={{ fontSize: "10px", color: "#bbb", fontWeight: "500" }}>All</span>
+        <button className="tap" onClick={() => setTab("all")} style={{ flex: 1, background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: "4px", padding: "6px 0" }}>
+          <IcoList on={tab === "all"} />
+          <span style={{ fontSize: "10px", color: tab === "all" ? "#1a9e8a" : "#bbb", fontWeight: "500" }}>All</span>
         </button>
       </div>
     </div>
