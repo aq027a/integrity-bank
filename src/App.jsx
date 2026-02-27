@@ -56,45 +56,68 @@ const Spinner = () => (
 );
 
 function Heatmap({ txs }) {
+  const containerRef = useRef(null);
+  const [numWeeks, setNumWeeks] = useState(16);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver(entries => {
+      const width = entries[0].contentRect.width;
+      const dayLabelWidth = 28 + 4; // label + gap
+      const cellSize = 12 + 2;      // cell + gap
+      const available = width - dayLabelWidth;
+      const weeks = Math.max(8, Math.floor(available / cellSize));
+      setNumWeeks(weeks);
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const dayMap = {};
   txs.forEach(tx => {
     const key = new Date(tx.created_at).toISOString().slice(0, 10);
     dayMap[key] = (dayMap[key] || 0) + tx.pts;
   });
+
   const today = new Date(); today.setHours(0,0,0,0);
+  const totalDays = numWeeks * 7;
   const cells = [];
-  for (let i = 363; i >= 0; i--) {
+  for (let i = totalDays - 1; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
     cells.push({ date: key, pts: dayMap[key] !== undefined ? dayMap[key] : null, d });
   }
+
   const weeks = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
+
   const monthLabels = [];
   weeks.forEach((week, wi) => {
     if (week[0].d.getDate() <= 7)
       monthLabels.push({ wi, label: week[0].d.toLocaleDateString("en-US", { month: "short" }) });
   });
+
   const cellColor = (pts) => pts === null ? "#f0efed" : pts > 0 ? "#1a9e8a" : pts < 0 ? "#e53535" : "#f0efed";
   const days = ["Mon","","Wed","","Fri","","Sun"];
+
   return (
-    <div>
-      <div style={{ display: "flex", marginLeft: "28px", marginBottom: "4px" }}>
+    <div ref={containerRef} style={{ width: "100%" }}>
+      <div style={{ display: "flex", marginLeft: "32px", marginBottom: "4px" }}>
         {weeks.map((_, wi) => {
           const lbl = monthLabels.find(m => m.wi === wi);
-          return <div key={wi} style={{ width: "14px", marginRight: "2px", fontSize: "9px", color: "#bbb", flexShrink: 0 }}>{lbl ? lbl.label : ""}</div>;
+          return <div key={wi} style={{ flex: 1, fontSize: "9px", color: "#bbb", overflow: "hidden" }}>{lbl ? lbl.label : ""}</div>;
         })}
       </div>
       <div style={{ display: "flex" }}>
-        <div style={{ display: "flex", flexDirection: "column", marginRight: "4px" }}>
-          {days.map((d, i) => <div key={i} style={{ height: "12px", marginBottom: "2px", fontSize: "9px", color: "#bbb", lineHeight: "12px", width: "24px" }}>{d}</div>)}
+        <div style={{ display: "flex", flexDirection: "column", marginRight: "4px", flexShrink: 0 }}>
+          {days.map((d, i) => <div key={i} style={{ height: "12px", marginBottom: "2px", fontSize: "9px", color: "#bbb", lineHeight: "12px", width: "28px" }}>{d}</div>)}
         </div>
-        <div style={{ display: "flex", gap: "2px" }}>
+        <div style={{ display: "flex", gap: "2px", flex: 1 }}>
           {weeks.map((week, wi) => (
-            <div key={wi} style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            <div key={wi} style={{ display: "flex", flexDirection: "column", gap: "2px", flex: 1 }}>
               {week.map((cell, di) => (
                 <div key={di} title={`${cell.date}${cell.pts !== null ? ": " + (cell.pts > 0 ? "+" : "") + cell.pts : ""}`}
-                  style={{ width: "12px", height: "12px", borderRadius: "2px", background: cellColor(cell.pts), flexShrink: 0 }} />
+                  style={{ width: "100%", aspectRatio: "1", borderRadius: "2px", background: cellColor(cell.pts) }} />
               ))}
             </div>
           ))}
