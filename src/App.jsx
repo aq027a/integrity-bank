@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { supabase } from "./supabase.js";
 
 const DIFFICULTIES = [
-  { id: 0, label: "Easy",    pts: 10  },
-  { id: 1, label: "Medium",  pts: 20  },
-  { id: 2, label: "Hard",    pts: 50  },
-  { id: 3, label: "Extreme", pts: 100 },
+  { id: 0, label: "Easy",    pts: 10,  penalty: 80  },
+  { id: 1, label: "Medium",  pts: 20,  penalty: 60  },
+  { id: 2, label: "Hard",    pts: 50,  penalty: 40  },
+  { id: 3, label: "Extreme", pts: 100, penalty: 20  },
 ];
 
 function getRank(score) {
@@ -232,13 +232,14 @@ export default function App() {
       promise: promise.trim(),
       diff_label: d.label,
       diff_pts: d.pts,
+      diff_penalty: d.penalty,
     }).select().single();
     if (!error && data) setQueue(prev => [data, ...prev]);
     setPromise(""); setDiff(1); setTab("home");
   }
 
   async function resolve(item, kept) {
-    const pts = kept ? item.diff_pts : -item.diff_pts;
+    const pts = kept ? item.diff_pts : -item.diff_penalty;
     const uid = session.user.id;
 
     const [{ error: delErr }, { data: tx, error: txErr }] = await Promise.all([
@@ -380,7 +381,7 @@ export default function App() {
                             color: "#e53535", fontSize: "13px", fontWeight: "600", fontFamily: "inherit",
                             display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
                           }}>
-                            Broke it <span style={{ opacity: 0.65, fontSize: "12px" }}>−{item.diff_pts}</span>
+                            Broke it <span style={{ opacity: 0.65, fontSize: "12px" }}>−{item.diff_penalty}</span>
                           </button>
                           <button className="tap" onClick={() => resolve(item, true)} style={{
                             flex: 1, padding: "11px 8px", background: "#1a9e8a",
@@ -471,7 +472,7 @@ export default function App() {
                   fontSize: "12px", fontWeight: "600",
                 }}>
                   <div>{d.label}</div>
-                  <div style={{ fontSize: "10px", opacity: 0.5, marginTop: "2px" }}>±{d.pts}</div>
+                  <div style={{ fontSize: "10px", opacity: 0.5, marginTop: "2px" }}>+{d.pts}/−{d.penalty}</div>
                 </button>
               ))}
             </div>
@@ -485,7 +486,7 @@ export default function App() {
               </div>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontSize: "13px", color: "#999" }}>If broken</span>
-                <span style={{ fontSize: "14px", fontWeight: "600", color: "#e53535" }}>−{fmtEur(DIFFICULTIES[diff].pts)}</span>
+                <span style={{ fontSize: "14px", fontWeight: "600", color: "#e53535" }}>−{fmtEur(DIFFICULTIES[diff].penalty)}</span>
               </div>
             </div>
           )}
