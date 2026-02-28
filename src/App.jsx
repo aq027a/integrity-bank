@@ -73,10 +73,13 @@ function Heatmap({ txs }) {
     return () => observer.disconnect();
   }, []);
 
+  // Count kept vs broken per day (ignore points)
   const dayMap = {};
   txs.forEach(tx => {
     const key = new Date(tx.created_at).toISOString().slice(0, 10);
-    dayMap[key] = (dayMap[key] || 0) + tx.pts;
+    if (!dayMap[key]) dayMap[key] = { kept: 0, broken: 0 };
+    if (tx.kept) dayMap[key].kept++;
+    else dayMap[key].broken++;
   });
 
   const today = new Date(); today.setHours(0,0,0,0);
@@ -85,7 +88,7 @@ function Heatmap({ txs }) {
   for (let i = totalDays - 1; i >= 0; i--) {
     const d = new Date(today); d.setDate(d.getDate() - i);
     const key = d.toISOString().slice(0, 10);
-    cells.push({ date: key, pts: dayMap[key] !== undefined ? dayMap[key] : null, d });
+    cells.push({ date: key, day: dayMap[key] || null, d });
   }
 
   const weeks = [];
@@ -97,7 +100,21 @@ function Heatmap({ txs }) {
       monthLabels.push({ wi, label: week[0].d.toLocaleDateString("en-US", { month: "short" }) });
   });
 
-  const cellColor = (pts) => pts === null ? "#f0efed" : pts > 0 ? "#1a9e8a" : pts < 0 ? "#e53535" : "#f0efed";
+  function cellColor(day) {
+    if (!day) return "#f0efed";
+    if (day.kept > 0 && day.broken === 0) return "#1a9e8a";
+    if (day.broken > 0 && day.kept === 0) return "#e53535";
+    // mixed day: more kept = green, more broken = red, equal = orange
+    if (day.kept > day.broken) return "#1a9e8a";
+    if (day.broken > day.kept) return "#e53535";
+    return "#f59e0b"; // exactly equal = orange
+  }
+
+  function cellTitle(cell) {
+    if (!cell.day) return cell.date;
+    const { kept, broken } = cell.day;
+    return `${cell.date}: ${kept} kept, ${broken} broken`;
+  }
   const days = ["Mon","","Wed","","Fri","","Sun"];
 
   return (
@@ -116,8 +133,8 @@ function Heatmap({ txs }) {
           {weeks.map((week, wi) => (
             <div key={wi} style={{ display: "flex", flexDirection: "column", gap: "2px", flex: 1 }}>
               {week.map((cell, di) => (
-                <div key={di} title={`${cell.date}${cell.pts !== null ? ": " + (cell.pts > 0 ? "+" : "") + cell.pts : ""}`}
-                  style={{ width: "100%", aspectRatio: "1", borderRadius: "2px", background: cellColor(cell.pts) }} />
+                <div key={di} title={cellTitle(cell)}
+                  style={{ width: "100%", aspectRatio: "1", borderRadius: "2px", background: cellColor(cell.day) }} />
               ))}
             </div>
           ))}
@@ -403,7 +420,7 @@ export default function App() {
           <div style={{ background: "#fff", borderRadius: "20px", padding: "20px 16px", marginBottom: "20px", overflowX: "auto" }}>
             <Heatmap txs={txs} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
-              {[{ c: "#e53535", l: "Minus" }, { c: "#f0efed", l: "Nichts", b: "1px solid #e0e0de" }, { c: "#1a9e8a", l: "Plus" }].map(item => (
+              {[{ c: "#e53535", l: "Broken" }, { c: "#f59e0b", l: "Gemischt" }, { c: "#f0efed", l: "–", b: "1px solid #e0e0de" }, { c: "#1a9e8a", l: "Kept" }].map(item => (
                 <div key={item.l} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
                   <div style={{ width: "12px", height: "12px", borderRadius: "3px", background: item.c, border: item.b }} />
                   <span style={{ fontSize: "10px", color: "#bbb" }}>{item.l}</span>
